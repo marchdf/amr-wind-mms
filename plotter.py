@@ -39,6 +39,17 @@ dashseq = [
 markertype = ["s", "d", "o", "p", "h"]
 
 
+def parse_input(fname):
+    with open(fname, "r") as f:
+        for line in f:
+            if line.startswith("amr.n_cell"):
+                n_cell = int(line.split("=")[-1].split()[0])
+            elif line.startswith("incflo.godunov_type"):
+                adv_type = line.split("=")[-1].strip()
+
+    return n_cell, adv_type
+
+
 if __name__ == "__main__":
 
     # Parse arguments
@@ -52,19 +63,33 @@ if __name__ == "__main__":
 
     lst = []
     for k, fdir in enumerate(args.fdirs):
+        iname = os.path.join(fdir, "mms.inp")
+        n_cell, adv_type = parse_input(iname)
+
         df = pd.read_csv(os.path.join(fdir, "mms.log"), delim_whitespace=True)
-        df["res"] = float(fdir)
-        lst.append(df.iloc[-1])
+        df["res"] = n_cell
+        df["adv"] = adv_type
+        lst.append(df)
 
-        for field in fields:
-            plt.figure(field)
-            p = plt.plot(df.time, df[f"L2_{field}"], lw=2, color=cmap[k], label=fdir)
-            p[0].set_dashes(dashseq[k])
+    df = pd.concat(lst).sort_values(by=["adv", "res", "time"])
 
-    df = pd.DataFrame(lst)
-    idx = 1
-    theory_order = 2
-    df["theory"] = df["L2_u"].iloc[idx] * (df.res.iloc[idx] / df.res) ** theory_order
+    lst = []
+    for i, (adv, group_adv) in enumerate(df.groupby(by="adv")):
+        for j, (n_cell, group) in enumerate(group_adv.groupby(by="res")):
+            lst.append(group.iloc[-1])
+            for field in fields:
+                plt.figure(field)
+                p = plt.plot(
+                    group.time,
+                    group[f"L2_{field}"],
+                    lw=2,
+                    color=cmap[i],
+                    label=f"{adv.upper()} (${{{n_cell}}}^3$)",
+                )
+                p[0].set_dashes(dashseq[j])
+
+    ooa = pd.DataFrame(lst)
+    print(ooa)
 
     fname = "plots.pdf"
     with PdfPages(fname) as pdf:
@@ -79,26 +104,39 @@ if __name__ == "__main__":
             plt.tight_layout()
             pdf.savefig(dpi=300)
 
-            plt.figure(f"ooa")
-            plt.loglog(
-                df.res,
-                df[f"L2_{field}"],
-                lw=2,
-                color=cmap[k],
-                marker=markertype[k],
-                mec=cmap[k],
-                mfc=cmap[k],
-                ms=10,
-                label=field,
-            )
+        for i, (adv, group) in enumerate(ooa.groupby(by="adv")):
+            for k, field in enumerate(fields):
+                plt.figure(f"ooa_{field}")
+                plt.loglog(
+                    group.res,
+                    group[f"L2_{field}"],
+                    lw=2,
+                    color=cmap[i],
+                    marker=markertype[i],
+                    mec=cmap[i],
+                    mfc=cmap[i],
+                    ms=10,
+                    label=f"{adv.upper()}",
+                )
 
-        plt.figure(f"ooa")
-        plt.loglog(df.res, df.theory, lw=1, color=cmap[-1], label="2nd order")
-        ax = plt.gca()
-        plt.xlabel(r"$N$", fontsize=22, fontweight="bold")
-        plt.ylabel(r"$L_2$", fontsize=22, fontweight="bold")
-        plt.setp(ax.get_xmajorticklabels(), fontsize=18, fontweight="bold")
-        plt.setp(ax.get_ymajorticklabels(), fontsize=18, fontweight="bold")
-        legend = ax.legend(loc="best")
-        plt.tight_layout()
-        pdf.savefig(dpi=300)
+                if i == 0:
+                    idx = 1
+                    theory_order = 2
+                    group["theory"] = (
+                        group["L2_u"].iloc[idx]
+                        * (group.res.iloc[idx] / group.res) ** theory_order
+                    )
+                    plt.loglog(
+                        group.res, group.theory, lw=1, color=cmap[-1], label="2nd order"
+                    )
+
+        for k, field in enumerate(fields):
+            plt.figure(f"ooa_{field}")
+            ax = plt.gca()
+            plt.xlabel(r"$N$", fontsize=22, fontweight="bold")
+            plt.ylabel(f"$L_2({field})$", fontsize=22, fontweight="bold")
+            plt.setp(ax.get_xmajorticklabels(), fontsize=18, fontweight="bold")
+            plt.setp(ax.get_ymajorticklabels(), fontsize=18, fontweight="bold")
+            legend = ax.legend(loc="best")
+            plt.tight_layout()
+            pdf.savefig(dpi=300)

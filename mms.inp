@@ -32,7 +32,7 @@ incflo.physics = MMS
 MMS.masa_name = "navierstokes_3d_incompressible_homogeneous"
 ICNS.source_terms = MMSForcing
 
-incflo.diffusion_type   = 2             # 0 = Explicit, 1 = Crank-Nicolson, 2 = Implicit
+incflo.diffusion_type   = 1             # 0 = Explicit, 1 = Crank-Nicolson, 2 = Implicit
 
 incflo.verbose          =   1           # incflo_level
 mac_proj.verbose        =   0           # MAC Projector

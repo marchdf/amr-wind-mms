@@ -1,32 +1,28 @@
 #!/bin/bash
-
 #SBATCH --job-name=amr-wind-mms
-#SBATCH --account=hfm
-#SBATCH --nodes=1
-#SBATCH --time=4:00:00
 #SBATCH -o %x.o%j
+#SBATCH --account=hfm
+#SBATCH --time=1:00:00
+#SBATCH --nodes=1
+#SBATCH --partition=debug
 
 module purge
-module load mpt
-export SPACK_MANAGER=${HOME}/exawind/spack-manager
-source ${SPACK_MANAGER}/start.sh && quick-activate ${SPACK_MANAGER}/environments/amr-wind-dev
+module load PrgEnv-intel/8.5.0
+module load libfabric/1.15.2.0
+module load cray-libsci/23.12.5
+module load intel/2023.2.0
+module load craype-network-ofi
+module load craype-x86-spr
+module load cray-mpich/8.1.28
+
+export EXAWIND_MANAGER="${HOME}/exawind/exawind-manager"
+source ${EXAWIND_MANAGER}/start.sh && spack-start
+quick-activate ${EXAWIND_MANAGER}/environments/amr-wind-of-intel
 spack load amr-wind
-
-ranks_per_node=36
-mpi_ranks=$(expr $SLURM_JOB_NUM_NODES \* $ranks_per_node)
-export OMP_NUM_THREADS=1  # Max hardware threads = 4
-export OMP_PLACES=threads
-export OMP_PROC_BIND=spread
-
-aw_exec="$(spack location -i amr-wind)/bin/amr_wind"
 
 echo "Job name       = $SLURM_JOB_NAME"
 echo "Num. nodes     = $SLURM_JOB_NUM_NODES"
-echo "Num. MPI Ranks = $mpi_ranks"
-echo "Num. threads   = $OMP_NUM_THREADS"
 echo "Working dir    = $PWD"
-
-cp ${aw_exec} $(pwd)/amr_wind
 
 adv_types=( "plm" "ppm" "weno_z" "bds" )
 cells=( 8 16 32 64 )
@@ -43,7 +39,7 @@ do
         cp "../../${iname}" .
         sed -i "/amr.n_cell/c\amr.n_cell=${cell} ${cell} ${cell}" "${iname}"
         sed -i "/incflo.godunov_type/c\incflo.godunov_type=${adv_type}" "${iname}"
-        mpirun -n ${mpi_ranks} ../../amr_wind "${iname}" >> mms.o
+        srun -N1 -n 104 --ntasks-per-node=104 --cpu_bind=cores amr_wind "${iname}" >> mms.o
         ls -1v *plt*/Header | tee movie.visit
         cd .. || exit
     done

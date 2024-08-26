@@ -38,6 +38,8 @@ dashseq = [
 ]
 markertype = ["s", "d", "o", "p", "h"]
 
+def flatten(xss):
+    return [x for xs in xss for x in xs]
 
 def parse_input(fname):
     with open(fname, "r") as f:
@@ -89,7 +91,6 @@ if __name__ == "__main__":
                 p[0].set_dashes(dashseq[j])
 
     ooa = pd.DataFrame(lst)
-    print(ooa)
 
     fname = "plots.pdf"
     with PdfPages(fname) as pdf:
@@ -104,6 +105,7 @@ if __name__ == "__main__":
             plt.tight_layout()
             pdf.savefig(dpi=300)
 
+        lst_theory = []
         for i, (adv, group) in enumerate(ooa.groupby(by="adv")):
             for k, field in enumerate(fields):
                 plt.figure(f"ooa_{field}")
@@ -119,7 +121,7 @@ if __name__ == "__main__":
                     label=f"{adv.upper()}",
                 )
 
-                if i == 0:
+                if k == 0:
                     idx = 1
                     theory_order = 2
                     group["theory"] = (
@@ -129,7 +131,11 @@ if __name__ == "__main__":
                     plt.loglog(
                         group.res, group.theory, lw=1, color=cmap[-1], label="2nd order"
                     )
+                    lst_theory.append(group.theory.to_list())
 
+        ooa["theory"] = flatten(lst_theory)
+        ooa.to_csv("data.csv", index=False)
+        print(ooa)
         for k, field in enumerate(fields):
             plt.figure(f"ooa_{field}")
             ax = plt.gca()
